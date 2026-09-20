@@ -128,6 +128,8 @@ local function ResolveKeyCode(str)
     return nil
 end
 
+local HeldKeys = {}
+
 local function SimulateKeyPress(keyCode)
     if not keyCode then return end
     pcall(function()
@@ -141,6 +143,35 @@ local function SimulateKeyPress(keyCode)
             keyrelease(keyCode.Value)
         end
     end)
+end
+
+local function SimulateKeyDown(keyCode)
+    if not keyCode then return end
+    pcall(function()
+        if VirtualInputManager then
+            VirtualInputManager:SendKeyEvent(true, keyCode, false, game)
+        elseif typeof(keypress) == "function" then
+            keypress(keyCode.Value)
+        end
+    end)
+end
+
+local function SimulateKeyUp(keyCode)
+    if not keyCode then return end
+    pcall(function()
+        if VirtualInputManager then
+            VirtualInputManager:SendKeyEvent(false, keyCode, false, game)
+        elseif typeof(keyrelease) == "function" then
+            keyrelease(keyCode.Value)
+        end
+    end)
+end
+
+local function ReleaseAllHeldKeys()
+    for kc in pairs(HeldKeys) do
+        SimulateKeyUp(kc)
+        HeldKeys[kc] = nil
+    end
 end
 
 local function SimulateMouseClick(buttonType)
@@ -172,6 +203,18 @@ local function ExecuteMacro(macro)
             if step.Type == "Key" then
                 local kc = ResolveKeyCode(step.Value)
                 if kc then SimulateKeyPress(kc) end
+            elseif step.Type == "KeyDown" then
+                local kc = ResolveKeyCode(step.Value)
+                if kc then
+                    HeldKeys[kc] = true
+                    SimulateKeyDown(kc)
+                end
+            elseif step.Type == "KeyUp" then
+                local kc = ResolveKeyCode(step.Value)
+                if kc then
+                    HeldKeys[kc] = nil
+                    SimulateKeyUp(kc)
+                end
             elseif step.Type == "Wait" then
                 local dur = tonumber(step.Value) or 0.1
                 task.wait(math.clamp(dur, 0.001, 10))
@@ -473,12 +516,12 @@ AddKeyRow.Name = "Row_AddKey"
 AddKeyRow.LayoutOrder = 6
 AddKeyRow.Parent = Container
 
-local AddKeyLabel = CreatePlasmiiLabel("Key Press", 0.4)
+local AddKeyLabel = CreatePlasmiiLabel("Key Action", 0.22)
 AddKeyLabel.Parent = AddKeyRow
 
 local AddKeyInput = Instance.new("TextBox")
-AddKeyInput.Size = UDim2.new(0.28, 0, 1, 0)
-AddKeyInput.Position = UDim2.new(0.42, 0, 0, 0)
+AddKeyInput.Size = UDim2.new(0.20, 0, 1, 0)
+AddKeyInput.Position = UDim2.new(0.24, 0, 0, 0)
 AddKeyInput.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 AddKeyInput.BackgroundTransparency = 0.95
 AddKeyInput.Font = Enum.Font.RobotoMono
@@ -494,8 +537,14 @@ local AddKeyInputCorner = Instance.new("UICorner")
 AddKeyInputCorner.CornerRadius = UDim.new(0, 8)
 AddKeyInputCorner.Parent = AddKeyInput
 
-local AddKeyBtn = CreatePlasmiiButton("+ Add", 0.28, 0.72)
-AddKeyBtn.Parent = AddKeyRow
+local AddTapBtn = CreatePlasmiiButton("+Tap", 0.16, 0.46)
+AddTapBtn.Parent = AddKeyRow
+
+local AddDownBtn = CreatePlasmiiButton("+Down", 0.17, 0.64)
+AddDownBtn.Parent = AddKeyRow
+
+local AddUpBtn = CreatePlasmiiButton("+Up", 0.16, 0.83)
+AddUpBtn.Parent = AddKeyRow
 
 -- 6. Add Wait Delay Row
 local AddWaitRow = CreatePlasmiiRow(30)
@@ -634,7 +683,11 @@ RenderUI = function()
 
         local descText = ""
         if step.Type == "Key" then
-            descText = string.format("%d. Press [%s]", i, tostring(step.Value))
+            descText = string.format("%d. Tap [%s]", i, tostring(step.Value))
+        elseif step.Type == "KeyDown" then
+            descText = string.format("%d. Key Down [%s]", i, tostring(step.Value))
+        elseif step.Type == "KeyUp" then
+            descText = string.format("%d. Key Up [%s]", i, tostring(step.Value))
         elseif step.Type == "Wait" then
             descText = string.format("%d. Wait [%s s]", i, tostring(step.Value))
         elseif step.Type == "Click" then
@@ -720,11 +773,31 @@ StatusBtn.Activated:Connect(function()
     end
 end)
 
-AddKeyBtn.Activated:Connect(function()
+AddTapBtn.Activated:Connect(function()
     local current = GetCurrentMacro()
     local val = AddKeyInput.Text
     if current and val and val ~= "" then
         table.insert(current.Steps, { Type = "Key", Value = val })
+        SaveMacros()
+        RenderUI()
+    end
+end)
+
+AddDownBtn.Activated:Connect(function()
+    local current = GetCurrentMacro()
+    local val = AddKeyInput.Text
+    if current and val and val ~= "" then
+        table.insert(current.Steps, { Type = "KeyDown", Value = val })
+        SaveMacros()
+        RenderUI()
+    end
+end)
+
+AddUpBtn.Activated:Connect(function()
+    local current = GetCurrentMacro()
+    local val = AddKeyInput.Text
+    if current and val and val ~= "" then
+        table.insert(current.Steps, { Type = "KeyUp", Value = val })
         SaveMacros()
         RenderUI()
     end
@@ -871,6 +944,7 @@ end
 -- Section 8: Export & Teardown
 -- ============================================================================
 local function Cleanup()
+    ReleaseAllHeldKeys()
     for i = #Janitor, 1, -1 do
         local x = Janitor[i]
         if typeof(x) == "RBXScriptConnection" then
