@@ -167,6 +167,8 @@ local function SimulateKeyUp(keyCode)
     end)
 end
 
+local HeldMouseButtons = {}
+
 local function ReleaseAllHeldKeys()
     for kc in pairs(HeldKeys) do
         SimulateKeyUp(kc)
@@ -188,6 +190,41 @@ local function SimulateMouseClick(buttonType)
             mouse2click()
         end
     end)
+end
+
+local function SimulateMouseDown(buttonType)
+    pcall(function()
+        local mousePos = UserInputService:GetMouseLocation()
+        local isLeft = (buttonType ~= "Right")
+        if VirtualInputManager then
+            VirtualInputManager:SendMouseButtonEvent(mousePos.X, mousePos.Y, isLeft and 0 or 1, true, game, 0)
+        elseif isLeft and typeof(mouse1press) == "function" then
+            mouse1press()
+        elseif not isLeft and typeof(mouse2press) == "function" then
+            mouse2press()
+        end
+    end)
+end
+
+local function SimulateMouseUp(buttonType)
+    pcall(function()
+        local mousePos = UserInputService:GetMouseLocation()
+        local isLeft = (buttonType ~= "Right")
+        if VirtualInputManager then
+            VirtualInputManager:SendMouseButtonEvent(mousePos.X, mousePos.Y, isLeft and 0 or 1, false, game, 0)
+        elseif isLeft and typeof(mouse1release) == "function" then
+            mouse1release()
+        elseif not isLeft and typeof(mouse2release) == "function" then
+            mouse2release()
+        end
+    end)
+end
+
+local function ReleaseAllHeldMouseButtons()
+    for btn in pairs(HeldMouseButtons) do
+        SimulateMouseUp(btn)
+        HeldMouseButtons[btn] = nil
+    end
 end
 
 local RunningMacros = {}
@@ -220,6 +257,12 @@ local function ExecuteMacro(macro)
                 task.wait(math.clamp(dur, 0.001, 10))
             elseif step.Type == "Click" then
                 SimulateMouseClick(step.Value)
+            elseif step.Type == "MouseDown" then
+                HeldMouseButtons[step.Value] = true
+                SimulateMouseDown(step.Value)
+            elseif step.Type == "MouseUp" then
+                HeldMouseButtons[step.Value] = nil
+                SimulateMouseUp(step.Value)
             end
         end
         RunningMacros[macro] = nil
@@ -576,20 +619,41 @@ AddWaitInputCorner.Parent = AddWaitInput
 local AddWaitBtn = CreatePlasmiiButton("+ Add", 0.28, 0.72)
 AddWaitBtn.Parent = AddWaitRow
 
--- 7. Add Click Row
-local AddClickRow = CreatePlasmiiRow(30)
-AddClickRow.Name = "Row_AddClick"
-AddClickRow.LayoutOrder = 8
-AddClickRow.Parent = Container
+-- 7. Add Mouse Left Row
+local AddMouseLRow = CreatePlasmiiRow(30)
+AddMouseLRow.Name = "Row_AddMouseL"
+AddMouseLRow.LayoutOrder = 8
+AddMouseLRow.Parent = Container
 
-local AddClickLabel = CreatePlasmiiLabel("Mouse Click", 0.4)
-AddClickLabel.Parent = AddClickRow
+local AddMouseLLabel = CreatePlasmiiLabel("Mouse Left", 0.28)
+AddMouseLLabel.Parent = AddMouseLRow
 
-local AddLeftBtn = CreatePlasmiiButton("Left", 0.28, 0.42)
-AddLeftBtn.Parent = AddClickRow
+local AddLClickBtn = CreatePlasmiiButton("+Click", 0.22, 0.30)
+AddLClickBtn.Parent = AddMouseLRow
 
-local AddRightBtn = CreatePlasmiiButton("Right", 0.28, 0.72)
-AddRightBtn.Parent = AddClickRow
+local AddLDownBtn = CreatePlasmiiButton("+Down", 0.22, 0.54)
+AddLDownBtn.Parent = AddMouseLRow
+
+local AddLUpBtn = CreatePlasmiiButton("+Up", 0.20, 0.78)
+AddLUpBtn.Parent = AddMouseLRow
+
+-- 8. Add Mouse Right Row
+local AddMouseRRow = CreatePlasmiiRow(30)
+AddMouseRRow.Name = "Row_AddMouseR"
+AddMouseRRow.LayoutOrder = 9
+AddMouseRRow.Parent = Container
+
+local AddMouseRLabel = CreatePlasmiiLabel("Mouse Right", 0.28)
+AddMouseRLabel.Parent = AddMouseRRow
+
+local AddRClickBtn = CreatePlasmiiButton("+Click", 0.22, 0.30)
+AddRClickBtn.Parent = AddMouseRRow
+
+local AddRDownBtn = CreatePlasmiiButton("+Down", 0.22, 0.54)
+AddRDownBtn.Parent = AddMouseRRow
+
+local AddRUpBtn = CreatePlasmiiButton("+Up", 0.20, 0.78)
+AddRUpBtn.Parent = AddMouseRRow
 
 -- Divider: Sequence Header
 local SeqHeaderRow = CreatePlasmiiRow(24)
@@ -692,6 +756,10 @@ RenderUI = function()
             descText = string.format("%d. Wait [%s s]", i, tostring(step.Value))
         elseif step.Type == "Click" then
             descText = string.format("%d. %s Click", i, tostring(step.Value))
+        elseif step.Type == "MouseDown" then
+            descText = string.format("%d. %s Mouse Down", i, tostring(step.Value))
+        elseif step.Type == "MouseUp" then
+            descText = string.format("%d. %s Mouse Up", i, tostring(step.Value))
         end
 
         local descLbl = Instance.new("TextLabel")
@@ -813,7 +881,7 @@ AddWaitBtn.Activated:Connect(function()
     end
 end)
 
-AddLeftBtn.Activated:Connect(function()
+AddLClickBtn.Activated:Connect(function()
     local current = GetCurrentMacro()
     if current then
         table.insert(current.Steps, { Type = "Click", Value = "Left" })
@@ -822,10 +890,46 @@ AddLeftBtn.Activated:Connect(function()
     end
 end)
 
-AddRightBtn.Activated:Connect(function()
+AddLDownBtn.Activated:Connect(function()
+    local current = GetCurrentMacro()
+    if current then
+        table.insert(current.Steps, { Type = "MouseDown", Value = "Left" })
+        SaveMacros()
+        RenderUI()
+    end
+end)
+
+AddLUpBtn.Activated:Connect(function()
+    local current = GetCurrentMacro()
+    if current then
+        table.insert(current.Steps, { Type = "MouseUp", Value = "Left" })
+        SaveMacros()
+        RenderUI()
+    end
+end)
+
+AddRClickBtn.Activated:Connect(function()
     local current = GetCurrentMacro()
     if current then
         table.insert(current.Steps, { Type = "Click", Value = "Right" })
+        SaveMacros()
+        RenderUI()
+    end
+end)
+
+AddRDownBtn.Activated:Connect(function()
+    local current = GetCurrentMacro()
+    if current then
+        table.insert(current.Steps, { Type = "MouseDown", Value = "Right" })
+        SaveMacros()
+        RenderUI()
+    end
+end)
+
+AddRUpBtn.Activated:Connect(function()
+    local current = GetCurrentMacro()
+    if current then
+        table.insert(current.Steps, { Type = "MouseUp", Value = "Right" })
         SaveMacros()
         RenderUI()
     end
@@ -945,6 +1049,7 @@ end
 -- ============================================================================
 local function Cleanup()
     ReleaseAllHeldKeys()
+    ReleaseAllHeldMouseButtons()
     for i = #Janitor, 1, -1 do
         local x = Janitor[i]
         if typeof(x) == "RBXScriptConnection" then
